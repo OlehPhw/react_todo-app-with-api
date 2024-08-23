@@ -1,8 +1,20 @@
 /* eslint-disable jsx-a11y/label-has-associated-control */
 /* eslint-disable jsx-a11y/control-has-associated-label */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { UserWarning } from './UserWarning';
-import { getTodos, USER_ID } from './api/todos';
+import {
+  deleteTodo,
+  getTodos,
+  updateTodoStatus,
+  updateTodoTitle,
+  USER_ID,
+} from './api/todos';
 import { Todo } from './types/Todo';
 import cn from 'classnames';
 import { FilterMethods } from './types/FilterMethods';
@@ -18,6 +30,134 @@ export const App: React.FC = () => {
   const [tempTodo, setTempTodo] = useState<Todo | null>(null);
   const [loadingTodosId, setLoadingTodosId] = useState<number[]>([]);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+  const [query, setQuery] = useState('');
+
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const cancelEditing = useCallback(() => {
+    setQuery('');
+    setLoadingTodosId([]);
+    setEditingTodo(null);
+  }, [setEditingTodo, setLoadingTodosId]);
+
+  useEffect(() => {
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelEditing();
+      }
+    };
+
+    document.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      document.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [cancelEditing]);
+
+  const handleOnClickDelete = async (todoForDelate: Todo) => {
+    setLoadingTodosId(prev => [...prev, todoForDelate.id]);
+    try {
+      await deleteTodo(todoForDelate.id);
+      setTodos(prevTodos =>
+        prevTodos.filter(todo => todoForDelate.id !== todo.id),
+      );
+    } catch (error) {
+      setErrorMessage('Unable to delete a todo');
+    } finally {
+      setLoadingTodosId([]);
+    }
+  };
+
+  const saveChanges = async () => {
+    const trimmedQuery = query.trim();
+
+    if (!trimmedQuery && editingTodo !== null) {
+      setLoadingTodosId(prev => [...prev, editingTodo.id]);
+      try {
+        await deleteTodo(editingTodo.id);
+        setTodos(todos.filter(todo => editingTodo.id !== todo.id));
+      } catch (error) {
+        setErrorMessage('Unable to delete a todo');
+
+        return;
+      } finally {
+        setLoadingTodosId([]);
+      }
+    }
+
+    if (trimmedQuery === editingTodo?.title) {
+      cancelEditing();
+
+      return;
+    }
+
+    if (trimmedQuery && editingTodo) {
+      try {
+        setLoadingTodosId(prev => [...prev, editingTodo.id]);
+        setTodos(prevTodos => {
+          return prevTodos.map(prevTodo => {
+            if (prevTodo.id === editingTodo.id) {
+              return {
+                ...prevTodo,
+                title: trimmedQuery,
+              };
+            }
+
+            return prevTodo;
+          });
+        });
+        await updateTodoTitle(editingTodo.id, trimmedQuery);
+
+        setEditingTodo(null);
+      } catch (error) {
+        setErrorMessage('Unable to update a todo');
+
+        return;
+      } finally {
+        setQuery('');
+        setLoadingTodosId([]);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (editingTodo && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [editingTodo]);
+
+  const handleOnChangeStatus = async (todoForChange: Todo) => {
+    try {
+      setLoadingTodosId(prev => [...prev, todoForChange.id]);
+      await updateTodoStatus(todoForChange.id, !todoForChange.completed);
+      setTodos(prevTodos =>
+        prevTodos.map(todo =>
+          todo.id === todoForChange.id
+            ? { ...todo, completed: !todo.completed }
+            : todo,
+        ),
+      );
+    } catch (error) {
+      setErrorMessage('Unable to update a todo');
+    } finally {
+      setLoadingTodosId([]);
+    }
+  };
+
+  const handleOnDoubleClick = (thisTodo: Todo) => {
+    setEditingTodo(thisTodo);
+    setQuery(thisTodo.title);
+  };
+
+  const handleOnChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(event.target.value);
+  };
+
+  const handleOnSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    saveChanges();
+  };
 
   useEffect(() => {
     const fetchTodos = async () => {
@@ -78,14 +218,17 @@ export const App: React.FC = () => {
 
         <section className="todoapp__main" data-cy="TodoList">
           <TodoList
-            setTodos={setTodos}
-            setErrorMessage={setErrorMessage}
+            handleOnClickDelete={handleOnClickDelete}
+            handleOnChangeStatus={handleOnChangeStatus}
+            handleOnDoubleClick={handleOnDoubleClick}
+            handleOnChange={handleOnChange}
+            handleOnSubmit={handleOnSubmit}
+            saveChanges={saveChanges}
+            query={query}
             filteredTodos={filteredTodos}
-            todos={todos}
+            inputRef={inputRef}
             tempTodo={tempTodo}
-            setLoadingTodosId={setLoadingTodosId}
             loadingTodosId={loadingTodosId}
-            setEditingTodo={setEditingTodo}
             editingTodo={editingTodo}
           />
         </section>

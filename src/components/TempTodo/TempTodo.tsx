@@ -1,11 +1,11 @@
 import React from 'react';
-import { Todo } from '../types/Todo';
+import { Todo } from '../../types/Todo';
 
 type Props = {
   tempTodo: Todo;
 };
 
-export const TodoItem: React.FC<Props> = ({ tempTodo }) => {
+export const TempTodo: React.FC<Props> = ({ tempTodo }) => {
   const { id, title } = tempTodo;
 
   return (
